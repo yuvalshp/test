@@ -1,0 +1,45 @@
+name: Download VS Code
+
+on:
+  workflow_dispatch:        # run manually
+  schedule:
+    - cron: '0 3 * * 1'     # every Monday at 03:00 UTC
+
+permissions:
+  contents: write           # needed to push and create releases
+
+jobs:
+  download:
+    runs-on: ubuntu-latest  # GitHub-hosted Ubuntu runner
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Download VS Code (stable, Linux x64 .deb)
+        run: |
+          mkdir -p downloads
+          curl -L --fail -o downloads/vscode-latest-amd64.deb \
+            "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64"
+          ls -lh downloads
+
+      - name: Commit file to repo (via Git LFS)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git lfs install
+          git lfs track "downloads/*.deb"
+          git add .gitattributes downloads/
+          git commit -m "Update VS Code download $(date -u +%Y-%m-%d)" || echo "No changes"
+          git push
+
+      - name: Also publish as a release asset (recommended)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="vscode-$(date -u +%Y%m%d)"
+          gh release create "$TAG" downloads/vscode-latest-amd64.deb \
+            --title "VS Code $TAG" --notes "Automated download" || \
+          gh release upload "$TAG" downloads/vscode-latest-amd64.deb --clobber
